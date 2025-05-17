@@ -138,7 +138,7 @@ class ReactionDataset(data.Dataset):
                 "reactants": reactants,
                 "products": products,
                 "cif_path": row["cif"],
-                "sample_id": f"sample_{rowid}",
+                "sample_id": row['hash'],
             }
             # get bond changes
             try:
