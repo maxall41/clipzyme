@@ -204,102 +204,95 @@ class ReactionDataset(data.Dataset):
         data
             pygData object with protein graph
         """
-        try:
-            raw_path = sample["cif_path"]
-            sample_id = sample["sample_id"]
-            if raw_path[-3:] == "pdb":
-                protein_parser = Bio.PDB.PDBParser()
-            elif raw_path[-3:] == "cif":
-                protein_parser = Bio.PDB.MMCIFParser()
-            protein_resolution = "residue"
-            graph_edge_args = {"knn_size": 10}
-            center_protein = True
+        raw_path = sample["cif_path"]
+        sample_id = sample["sample_id"]
+        if raw_path[-3:] == "pdb":
+            protein_parser = Bio.PDB.PDBParser()
+        elif raw_path[-3:] == "cif":
+            protein_parser = Bio.PDB.MMCIFParser()
+        protein_resolution = "residue"
+        graph_edge_args = {"knn_size": 10}
+        center_protein = True
 
-            # parse pdb
-            all_res, all_atom, all_pos = read_structure_file(
-                protein_parser, raw_path, sample_id
+        # parse pdb
+        all_res, all_atom, all_pos = read_structure_file(
+            protein_parser, raw_path, sample_id
+        )
+        # filter resolution of protein (backbone, atomic, etc.)
+        atom_names, seq, pos = filter_resolution(
+            all_res,
+            all_atom,
+            all_pos,
+            protein_resolution=protein_resolution,
+        )
+        # generate graph
+        data = build_graph(atom_names, seq, pos, sample_id)
+        # kNN graph
+        data = compute_graph_edges(data, **graph_edge_args)
+        if center_protein:
+            center = data["receptor"].pos.mean(dim=0, keepdim=True)
+            data["receptor"].pos = data["receptor"].pos - center
+            data.center = center
+
+        sequence = sample["sequence"]
+        data.structure_sequence = sequence
+
+        node_embeddings_args = {
+            "model": self.esm_model,
+            "model_location": "",
+            "alphabet": self.alphabet,
+            "batch_converter": self.batch_converter,
+        }
+        node_embedding = compute_node_embedding(data, **node_embeddings_args)
+        # Fix sequence length mismatches
+        if len(data["receptor"].seq) != node_embedding.shape[0]:
+            print("Computing seq embedding for mismatched seq length")
+            AA_seq = ""
+            for char in seq:
+                AA_seq += protein_letters_3to1[char]
+
+            data.structure_sequence = AA_seq
+            data["receptor"].x = compute_node_embedding(
+                data, **node_embeddings_args
             )
-            # filter resolution of protein (backbone, atomic, etc.)
-            atom_names, seq, pos = filter_resolution(
-                all_res,
-                all_atom,
-                all_pos,
-                protein_resolution=protein_resolution,
-            )
-            # generate graph
-            data = build_graph(atom_names, seq, pos, sample_id)
-            # kNN graph
-            data = compute_graph_edges(data, **graph_edge_args)
-            if center_protein:
-                center = data["receptor"].pos.mean(dim=0, keepdim=True)
-                data["receptor"].pos = data["receptor"].pos - center
-                data.center = center
+        else:
+            data["receptor"].x = node_embedding
 
-            sequence = sample["sequence"]
-            data.structure_sequence = sequence
-
-            node_embeddings_args = {
-                "model": self.esm_model,
-                "model_location": "",
-                "alphabet": self.alphabet,
-                "batch_converter": self.batch_converter,
-            }
-            node_embedding = compute_node_embedding(data, **node_embeddings_args)
-            # Fix sequence length mismatches
-            if len(data["receptor"].seq) != node_embedding.shape[0]:
-                print("Computing seq embedding for mismatched seq length")
-                AA_seq = ""
-                for char in seq:
-                    AA_seq += protein_letters_3to1[char]
-
-                data.structure_sequence = AA_seq
-                data["receptor"].x = compute_node_embedding(
-                    data, **node_embeddings_args
-                )
-            else:
-                data["receptor"].x = node_embedding
-
-            if len(data["receptor"].seq) != data["receptor"].x.shape[0]:
-                return None
-
-            if hasattr(data, "x") and not hasattr(data["receptor"], "x"):
-                data["receptor"].x = data.x
-
-            if not hasattr(data, "structure_sequence"):
-                data.structure_sequence = "".join(
-                    [protein_letters_3to1[char] for char in data["receptor"].seq]
-                )
-
-            keep_keys = {
-                "receptor",
-                "structure_sequence",
-                ("receptor", "contact", "receptor"),
-            }
-
-            data_keys = data.to_dict().keys()
-            for d_key in data_keys:
-                if d_key not in keep_keys:
-                    delattr(data, d_key)
-
-            coors = data["receptor"].pos
-            feats = data["receptor"].x
-            edge_index = data["receptor", "contact", "receptor"].edge_index
-            assert (
-                coors.shape[0] == feats.shape[0]
-            ), f"Number of nodes do not match between coors ({coors.shape[0]}) and feats ({feats.shape[0]})"
-
-            assert (
-                max(edge_index[0]) < coors.shape[0]
-                and max(edge_index[1]) < coors.shape[0]
-            ), "Edge index contains node indices not present in coors"
-
-            return data
-
-        except Exception as e:
-            print(
-                f"Could not create protein graph for:  {sample['protein_id']} because of the exception {e}"
-            )
+        if len(data["receptor"].seq) != data["receptor"].x.shape[0]:
             return None
+
+        if hasattr(data, "x") and not hasattr(data["receptor"], "x"):
+            data["receptor"].x = data.x
+
+        if not hasattr(data, "structure_sequence"):
+            data.structure_sequence = "".join(
+                [protein_letters_3to1[char] for char in data["receptor"].seq]
+            )
+
+        keep_keys = {
+            "receptor",
+            "structure_sequence",
+            ("receptor", "contact", "receptor"),
+        }
+
+        data_keys = data.to_dict().keys()
+        for d_key in data_keys:
+            if d_key not in keep_keys:
+                delattr(data, d_key)
+
+        coors = data["receptor"].pos
+        feats = data["receptor"].x
+        edge_index = data["receptor", "contact", "receptor"].edge_index
+        assert (
+            coors.shape[0] == feats.shape[0]
+        ), f"Number of nodes do not match between coors ({coors.shape[0]}) and feats ({feats.shape[0]})"
+
+        assert (
+            max(edge_index[0]) < coors.shape[0]
+            and max(edge_index[1]) < coors.shape[0]
+        ), "Edge index contains node indices not present in coors"
+
+        return data
 
     def __len__(self):
         return len(self.dataset)
