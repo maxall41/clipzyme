@@ -275,10 +275,10 @@ class ReactionDataset(data.Dataset):
             ("receptor", "contact", "receptor"),
         }
 
-        data_keys = data.to_dict().keys()
-        for d_key in data_keys:
-            if d_key not in keep_keys:
-                delattr(data, d_key)
+        # data_keys = data.to_dict().keys()
+        # for d_key in data_keys:
+        #     if d_key not in keep_keys:
+        #         delattr(data, d_key)
 
         coors = data["receptor"].pos
         feats = data["receptor"].x
