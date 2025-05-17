@@ -296,6 +296,7 @@ class EnzymeMap(AbstractDataset):
                 products = Chem.MolToSmiles(products_mol)
 
             sample_id = sample["rowid"]
+            print("USING ENZYMEMAP")
             item = {
                 "reaction": reaction,
                 "reactants": reactants,
