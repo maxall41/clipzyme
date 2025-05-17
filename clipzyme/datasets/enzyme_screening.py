@@ -46,7 +46,7 @@ class ScreeningEnzymes(AbstractDataset):
                 "graph_edge_args": {"knn_size": 10},
                 "center_protein": True,
             }
-
+            print("USING SCREENING")
             sample_id = protein_args["sample_id"]
             protein_parser = protein_args["protein_parser"]
             protein_resolution = protein_args["protein_resolution"]
