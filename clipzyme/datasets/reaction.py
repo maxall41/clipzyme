@@ -342,6 +342,7 @@ class ReactionDataset(data.Dataset):
     def SUMMARY_STATEMENT(self) -> None:
         reactions = [d["reaction"] for d in self.dataset]
         proteins = [d["sequence"] for d in self.dataset]
+        print("REACTION SUMMARY USING-X")
 
         statement = f""" 
         DATASET CREATED:
