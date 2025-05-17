@@ -34,6 +34,8 @@ class AbstractDataset(data.Dataset, Nox):
 
         super(AbstractDataset, self).__init__()
 
+        print("ABSTRACT DATASET USING-X")
+
         self.split_group = split_group
         self.args = args
 
