@@ -31,20 +31,6 @@ def parse_dispatcher_config(config):
     returns: experiment_axies - axies that the grid search is searching over
     """
 
-    assert all(
-        [
-            k
-            in [
-                "script",
-                "available_gpus",
-                "cartesian_hyperparams",
-                "paired_hyperparams",
-                "tune_hyperparams",
-            ]
-            for k in config.keys()
-        ]
-    )
-
     cartesian_hyperparamss = config["cartesian_hyperparams"]
     paired_hyperparams = config.get("paired_hyperparams", [])
     flags = []
