@@ -315,75 +315,70 @@ def create_protein_graph(cif_path: str, esm_path: str) -> Union[pygData, None]:
     esm_model, alphabet = pretrained.load_model_and_alphabet(esm_path)
     batch_converter = alphabet.get_batch_converter()
 
-    try:
-        raw_path = cif_path
-        sample_id = "proteinX"
-        protein_parser = Bio.PDB.MMCIFParser()
-        protein_resolution = "residue"
-        graph_edge_args = {"knn_size": 10}
-        center_protein = True
+    raw_path = cif_path
+    sample_id = "proteinX"
+    protein_parser = Bio.PDB.MMCIFParser()
+    protein_resolution = "residue"
+    graph_edge_args = {"knn_size": 10}
+    center_protein = True
 
-        # parse pdb
-        all_res, all_atom, all_pos = read_structure_file(
-            protein_parser, raw_path, sample_id
-        )
-        # filter resolution of protein (backbone, atomic, etc.)
-        atom_names, seq, pos = filter_resolution(
-            all_res,
-            all_atom,
-            all_pos,
-            protein_resolution=protein_resolution,
-        )
-        # generate graph
-        data = build_graph(atom_names, seq, pos, sample_id)
-        # kNN graph
-        data = compute_graph_edges(data, **graph_edge_args)
-        if center_protein:
-            center = data["receptor"].pos.mean(dim=0, keepdim=True)
-            data["receptor"].pos = data["receptor"].pos - center
-            data.center = center
+    # parse pdb
+    all_res, all_atom, all_pos = read_structure_file(
+        protein_parser, raw_path, sample_id
+    )
+    # filter resolution of protein (backbone, atomic, etc.)
+    atom_names, seq, pos = filter_resolution(
+        all_res,
+        all_atom,
+        all_pos,
+        protein_resolution=protein_resolution,
+    )
+    # generate graph
+    data = build_graph(atom_names, seq, pos, sample_id)
+    # kNN graph
+    data = compute_graph_edges(data, **graph_edge_args)
+    if center_protein:
+        center = data["receptor"].pos.mean(dim=0, keepdim=True)
+        data["receptor"].pos = data["receptor"].pos - center
+        data.center = center
 
-        # get sequence
-        AA_seq = ""
-        for char in seq:
-            AA_seq += protein_letters_3to1[char]
+    # get sequence
+    AA_seq = ""
+    for char in seq:
+        AA_seq += protein_letters_3to1[char]
 
-        data.structure_sequence = AA_seq
+    data.structure_sequence = AA_seq
 
-        node_embeddings_args = {
-            "model": esm_model,
-            "model_location": "",
-            "alphabet": alphabet,
-            "batch_converter": batch_converter,
-        }
+    node_embeddings_args = {
+        "model": esm_model,
+        "model_location": "",
+        "alphabet": alphabet,
+        "batch_converter": batch_converter,
+    }
 
-        # compute embeddings
-        data["receptor"].x = compute_node_embedding(data, **node_embeddings_args)
+    # compute embeddings
+    data["receptor"].x = compute_node_embedding(data, **node_embeddings_args)
 
-        if len(data["receptor"].seq) != data["receptor"].x.shape[0]:
-            return None
-
-        if hasattr(data, "x") and not hasattr(data["receptor"], "x"):
-            data["receptor"].x = data.x
-
-        if not hasattr(data, "structure_sequence"):
-            data.structure_sequence = "".join(
-                [protein_letters_3to1[char] for char in data["receptor"].seq]
-            )
-
-        coors = data["receptor"].pos
-        feats = data["receptor"].x
-        edge_index = data["receptor", "contact", "receptor"].edge_index
-        assert (
-            coors.shape[0] == feats.shape[0]
-        ), f"Number of nodes do not match between coors ({coors.shape[0]}) and feats ({feats.shape[0]})"
-
-        assert (
-            max(edge_index[0]) < coors.shape[0] and max(edge_index[1]) < coors.shape[0]
-        ), "Edge index contains node indices not present in coors"
-
-        return data
-
-    except Exception as e:
-        print(f"Could not create protein graph because of the exception: {e}")
+    if len(data["receptor"].seq) != data["receptor"].x.shape[0]:
         return None
+
+    if hasattr(data, "x") and not hasattr(data["receptor"], "x"):
+        data["receptor"].x = data.x
+
+    if not hasattr(data, "structure_sequence"):
+        data.structure_sequence = "".join(
+            [protein_letters_3to1[char] for char in data["receptor"].seq]
+        )
+
+    coors = data["receptor"].pos
+    feats = data["receptor"].x
+    edge_index = data["receptor", "contact", "receptor"].edge_index
+    assert (
+        coors.shape[0] == feats.shape[0]
+    ), f"Number of nodes do not match between coors ({coors.shape[0]}) and feats ({feats.shape[0]})"
+
+    assert (
+        max(edge_index[0]) < coors.shape[0] and max(edge_index[1]) < coors.shape[0]
+    ), "Edge index contains node indices not present in coors"
+
+    return data
