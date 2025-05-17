@@ -300,47 +300,43 @@ class ReactionDataset(data.Dataset):
     def __getitem__(self, index):
         sample = self.dataset[index]
         sample_id = sample["sample_id"]
-        try:
-            reactants, products = process_mapped_reaction(
-                sample["reaction"],
-                sample["bond_changes"],
+        reactants, products = process_mapped_reaction(
+            sample["reaction"],
+            sample["bond_changes"],
+        )
+        protein_id = sample["protein_id"]
+
+        item = {
+            "reactants": reactants,
+            "products": products,
+            "protein_id": protein_id,
+            "sample_id": sample_id,
+            "cif_path": sample["cif_path"],
+            "sequence": sample["sequence"],
+        }
+
+        if self.protein_cache_dir:
+            graph_path_cache = os.path.join(
+                self.protein_cache_dir, f"{protein_id}.pt"
             )
-            protein_id = sample["protein_id"]
-
-            item = {
-                "reactants": reactants,
-                "products": products,
-                "protein_id": protein_id,
-                "sample_id": sample_id,
-                "cif_path": sample["cif_path"],
-                "sequence": sample["sequence"],
-            }
-
-            if self.protein_cache_dir:
-                graph_path_cache = os.path.join(
-                    self.protein_cache_dir, f"{protein_id}.pt"
-                )
-                try:
-                    data = torch.load(graph_path_cache)
-                    if data is None:
-                        data = self.create_protein_graph(item)
-                        torch.save(data, graph_path_cache)
-                except:
+            try:
+                data = torch.load(graph_path_cache)
+                if data is None:
                     data = self.create_protein_graph(item)
-                    if data is None:
-                        raise ValueError(
-                            f"Could not create protein graph for:  {protein_id}"
-                        )
                     torch.save(data, graph_path_cache)
-            else:
+            except:
                 data = self.create_protein_graph(item)
+                if data is None:
+                    raise ValueError(
+                        f"Could not create protein graph for:  {protein_id}"
+                    )
+                torch.save(data, graph_path_cache)
+        else:
+            data = self.create_protein_graph(item)
 
-            item["graph"] = data
+        item["graph"] = data
 
-            return item
-
-        except Exception as e:
-            print(f"Could not load sample {sample_id} because of an exception {e}")
+        return item
 
     @property
     def SUMMARY_STATEMENT(self) -> None:
